@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { TEMPLATES } from "@/lib/templates";
-import "./page-home.css";
+import "./create.css";
 
 export default function HomePage() {
   return (
