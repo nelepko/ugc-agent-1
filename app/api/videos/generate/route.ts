@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           videoJobId: created.id,
-          status: created.status,
+          status: "QUEUED",
           persisted: true,
           storageMode: "database",
         },
