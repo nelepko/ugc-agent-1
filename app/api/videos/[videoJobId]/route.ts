@@ -15,6 +15,55 @@ export async function GET(_request: NextRequest, context: Context) {
       return NextResponse.json({ error: { code: "INVALID_INPUT", message: "videoJobId is required", details: {} } }, { status: 400 });
     }
 
+    if (videoJobId.startsWith("veoop_")) {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return NextResponse.json(
+          { error: { code: "CONFIG_ERROR", message: "GEMINI_API_KEY is missing", details: {} } },
+          { status: 500 }
+        );
+      }
+
+      const operationName = decodeURIComponent(videoJobId.replace("veoop_", ""));
+      const dynamicImport = new Function("m", "return import(m)") as (m: string) => Promise<{
+        GoogleGenAI: new (args: { apiKey: string }) => {
+          operations: {
+            getVideosOperation: (args: { operation: { name: string } }) => Promise<{
+              done?: boolean;
+              error?: { message?: string };
+              response?: {
+                generatedVideos?: Array<{
+                  video?: { uri?: string };
+                }>;
+              };
+            }>;
+          };
+        };
+      }>;
+
+      const { GoogleGenAI } = await dynamicImport("@google/genai");
+      const ai = new GoogleGenAI({ apiKey });
+      const operation = await ai.operations.getVideosOperation({
+        operation: { name: operationName },
+      });
+
+      const generatedVideoUri = operation.response?.generatedVideos?.[0]?.video?.uri ?? null;
+      const status = operation.done ? "COMPLETED" : "PROCESSING";
+      const errorMessage = operation.error?.message ?? null;
+
+      return NextResponse.json({
+        id: videoJobId,
+        status: errorMessage ? "FAILED" : status,
+        videoUrl: generatedVideoUri,
+        thumbnailUrl: null,
+        durationSec: status === "COMPLETED" ? 25 : null,
+        errorMessage,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        storageMode: "veo-operation",
+      });
+    }
+
     const prisma = await getPrismaClient();
     if (prisma) {
       const record = (await prisma.videoJob.findUnique({
