@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { TEMPLATES, getTemplate, type TemplateId } from "@/lib/templates";
-import "./create.css";
+import "./page-home.css";
 
 type ScriptVariant = {
   id: string;
