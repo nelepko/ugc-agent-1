@@ -1,0 +1,242 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ScriptStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+}
+
+enum VideoStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum PlanTier {
+  FREE
+  STARTER
+  PRO
+  TEAM
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  fullName      String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  memberships   WorkspaceMember[]
+  projects      Project[]
+  scriptRuns    ScriptRun[]
+  videoJobs     VideoJob[]
+}
+
+model Workspace {
+  id            String            @id @default(cuid())
+  name          String
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  members       WorkspaceMember[]
+  brands        Brand[]
+  projects      Project[]
+  subscriptions Subscription[]
+}
+
+model WorkspaceMember {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  userId        String
+  role          Role      @default(MEMBER)
+  createdAt     DateTime  @default(now())
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Brand {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  name          String
+  websiteUrl    String?
+  description   String?
+  voiceTone     String?
+  targetAudience String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  products      Product[]
+  projects      Project[]
+
+  @@index([workspaceId])
+}
+
+model Product {
+  id            String    @id @default(cuid())
+  brandId       String
+  name          String
+  description   String
+  category      String?
+  priceCents    Int?
+  currency      String?   @default("USD")
+  offerText     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  brand         Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  projects      Project[]
+
+  @@index([brandId])
+}
+
+model Template {
+  id            String    @id
+  name          String
+  description   String
+  durationSecMin Int      @default(20)
+  durationSecMax Int      @default(30)
+  fieldsJson    Json
+  scriptHintsJson Json
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  projects      Project[]
+  scriptRuns    ScriptRun[]
+  videoJobs     VideoJob[]
+}
+
+model Project {
+  id            String        @id @default(cuid())
+  workspaceId   String
+  brandId       String
+  productId     String?
+  ownerId       String
+  templateId    String
+  title         String
+  objective     String?
+  status        ProjectStatus @default(DRAFT)
+  inputJson     Json
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand         Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  product       Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  owner         User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  template      Template      @relation(fields: [templateId], references: [id])
+  scripts       ScriptRun[]
+  videos        VideoJob[]
+
+  @@index([workspaceId, createdAt])
+  @@index([brandId])
+  @@index([ownerId])
+  @@index([templateId])
+}
+
+model ScriptRun {
+  id            String       @id @default(cuid())
+  workspaceId   String
+  projectId     String
+  userId        String
+  templateId    String
+  promptVersion String       @default("v1")
+  inputJson     Json
+  scriptText    String
+  status        ScriptStatus @default(DRAFT)
+  tokensIn      Int?
+  tokensOut     Int?
+  createdAt     DateTime     @default(now())
+
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template      Template     @relation(fields: [templateId], references: [id])
+
+  @@index([workspaceId, createdAt])
+  @@index([projectId])
+  @@index([userId])
+}
+
+model VideoJob {
+  id            String      @id @default(cuid())
+  workspaceId   String
+  projectId     String
+  userId        String
+  templateId    String
+  scriptRunId   String?
+  provider      String
+  providerJobId String?
+  status        VideoStatus @default(QUEUED)
+  durationSec   Int?
+  aspectRatio   String      @default("9:16")
+  videoUrl      String?
+  thumbnailUrl  String?
+  errorMessage  String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template      Template    @relation(fields: [templateId], references: [id])
+
+  @@index([workspaceId, createdAt])
+  @@index([projectId])
+  @@index([userId])
+  @@index([providerJobId])
+}
+
+model Subscription {
+  id                    String   @id @default(cuid())
+  workspaceId           String
+  provider              String   @default("stripe")
+  providerCustomerId    String?
+  providerSubscriptionId String?
+  tier                  PlanTier @default(FREE)
+  status                String
+  currentPeriodEnd      DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubscriptionId])
+  @@index([workspaceId])
+}
+
+model UsageEvent {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  userId        String?
+  eventType     String
+  quantity      Int      @default(1)
+  metadataJson  Json?
+  createdAt     DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([eventType, createdAt])
+}
